@@ -160,6 +160,47 @@ route('POST', '/api/match/import', async ({ body }) => {
   };
 });
 
+// 主动导入本地 JSON 文件(单场对局或导出的完整包)
+route('POST', '/api/match/import-json', async ({ body }) => {
+  if (!body || typeof body !== 'object') {
+    throw Object.assign(new Error('上传的 JSON 格式不正确'), { status: 400 });
+  }
+  let bundle = body.bundle || body;
+  let gameId = Number(body.gameId || bundle.gameId || bundle.game?.gameId || bundle.metadata?.matchId);
+  if (!gameId || isNaN(gameId)) {
+    throw Object.assign(new Error('无法在 JSON 中识别到有效的 gameId (对局 ID)'), { status: 400 });
+  }
+
+  // 若为精简或快照格式，自动规整
+  if (!bundle.game && (bundle.allPlayers || bundle.liveScores)) {
+    bundle = analysis.snapshotToMatchBundle(bundle);
+  }
+  if (!bundle.gameId) bundle.gameId = gameId;
+
+  // 写入 matches
+  store.writeJson(`matches/${gameId}.json`, bundle);
+
+  // 若附带 AI 分析结果，同步持久化
+  if (body.ai && typeof body.ai === 'object') {
+    store.writeJson(`ai/${gameId}.json`, body.ai);
+  }
+
+  let inInnerwar = false;
+  if (body.addToInnerwar) {
+    await innerwar.add(gameId, { note: body.note || 'JSON文件导入', fetch: false });
+    inInnerwar = true;
+  }
+
+  const digest = matches.digestOf(bundle);
+  return {
+    ok: true,
+    gameId,
+    inInnerwar,
+    digest,
+    hasAi: !!body.ai,
+  };
+});
+
 route('GET', '/api/match/probe', async ({ q }) => {
   const gameId = Number(q.get('gameId'));
   if (!gameId || isNaN(gameId)) throw Object.assign(new Error('请输入有效的数字对局 ID'), { status: 400 });
@@ -315,6 +356,114 @@ route('GET', '/api/match/:id/raw', async ({ params, q, res }) => {
 
 route('POST', '/api/match/:id/ai', async ({ params, body }) => ai.analyzeMatch(params.id, { force: !!body.force }));
 
+// 单场完整对局导出(包含原始 bundle + 分路摘要 + AI 复盘报告)
+route('GET', '/api/match/:id/export', async ({ params, res }) => {
+  const gameId = Number(params.id);
+  let b;
+  try {
+    b = await matches.getMatch(gameId);
+  } catch (e) {
+    const snap = store.readJson(`spectate/live-${gameId}.json`) || watcher.getSnapshot(gameId);
+    if (snap) b = analysis.snapshotToMatchBundle(snap);
+    else throw e;
+  }
+  const digest = matches.digestOf(b);
+  const aiReport = store.readJson(`ai/${gameId}.json`, null);
+  const data = {
+    gameId,
+    exportedAt: new Date().toISOString(),
+    bundle: b,
+    digest,
+    ai: aiReport,
+  };
+  sendDownload(res, `lol-match-${gameId}-package.json`, data);
+  return null;
+});
+
+// 一键上传单场对局到云端服务器(SA1)
+route('POST', '/api/match/:id/cloud-upload', async ({ params, body }) => {
+  const gameId = Number(params.id);
+  if (!gameId) throw Object.assign(new Error('无效对局 ID'), { status: 400 });
+
+  let b;
+  try {
+    b = await matches.getMatch(gameId);
+  } catch (e) {
+    const snap = store.readJson(`spectate/live-${gameId}.json`) || watcher.getSnapshot(gameId);
+    if (snap) b = analysis.snapshotToMatchBundle(snap);
+    else throw e;
+  }
+
+  const digest = matches.digestOf(b);
+  const aiReport = store.readJson(`ai/${gameId}.json`, null);
+  const settings = store.getSettings();
+  const cloud = settings.cloud || {};
+  const cloudUrl = (cloud.url || 'https://match.alonglfb.com').replace(/\/+$/, '');
+  const cloudToken = cloud.token || 'along-lol-2026';
+
+  if (!cloudUrl) {
+    throw Object.assign(new Error('请先在「设置」中配置云端服务地址 (Cloud URL)'), { status: 400 });
+  }
+
+  const payload = {
+    gameId,
+    bundle: b,
+    digest,
+    ai: aiReport,
+    note: body.note || (b.isCustom ? '自定义对局' : ''),
+    published: body.published !== false,
+    uploadedAt: Date.now(),
+  };
+
+  const resp = await fetch(`${cloudUrl}/api/matches/upload`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-upload-token': cloudToken,
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!resp.ok) {
+    const errText = await resp.text();
+    let msg = `云端服务返回错误 (HTTP ${resp.status})`;
+    try {
+      const errJson = JSON.parse(errText);
+      if (errJson.error || errJson.message) msg = errJson.error || errJson.message;
+    } catch {}
+    throw Object.assign(new Error(msg), { status: resp.status });
+  }
+
+  const result = await resp.json();
+  return {
+    ok: true,
+    gameId,
+    cloudUrl: `${cloudUrl}/#/match/${gameId}`,
+    message: result.message || '上传云端成功',
+  };
+});
+
+// 云端连通性测试
+route('POST', '/api/cloud/test', async ({ body }) => {
+  const settings = store.getSettings();
+  const cloud = settings.cloud || {};
+  const cloudUrl = (body.url || cloud.url || 'https://match.alonglfb.com').replace(/\/+$/, '');
+  const cloudToken = body.token !== undefined ? body.token : (cloud.token || 'along-lol-2026');
+
+  try {
+    const resp = await fetch(`${cloudUrl}/api/status`, {
+      headers: { 'x-upload-token': cloudToken },
+    });
+    if (!resp.ok) {
+      throw new Error(`云端服务响应状态异常: HTTP ${resp.status}`);
+    }
+    const data = await resp.json();
+    return { ok: true, data };
+  } catch (e) {
+    throw Object.assign(new Error(`无法连接到云端服务 (${cloudUrl}): ${e.message}`), { status: 502 });
+  }
+});
+
 // 内战
 route('GET', '/api/innerwar', async ({ q }) => {
   const since = Number(q.get('since') || 0);
@@ -355,6 +504,7 @@ const maskSettings = (s) => ({
   ...s,
   openai: { ...s.openai, apiKey: '', hasKey: !!s.openai.apiKey, keyHint: s.openai.apiKey ? '••••' + s.openai.apiKey.slice(-4) : '', envKey: !!process.env.OPENAI_API_KEY },
   lcu: { ...s.lcu, token: s.lcu.token ? '••••' : '' },
+  cloud: { ...(s.cloud || { url: 'https://match.alonglfb.com', token: 'along-lol-2026' }) },
 });
 route('GET', '/api/settings', async () => ({ ...maskSettings(store.getSettings()), dataDir: store.DATA_DIR }));
 route('PUT', '/api/settings', async ({ body }) => {
@@ -374,6 +524,9 @@ route('PUT', '/api/settings', async ({ body }) => {
     s.lcu = { ...s.lcu, ...rest };
     if (typeof token === 'string' && token && !token.startsWith('••')) s.lcu.token = token;
     if (token === '') s.lcu.token = '';
+  }
+  if (body.cloud) {
+    s.cloud = { ...(s.cloud || {}), ...body.cloud };
   }
   store.saveSettings(s);
   gamedata.resetMemory();

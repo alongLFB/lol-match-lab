@@ -64,6 +64,10 @@ const DEFAULT_SETTINGS = {
     extraPrompt: '',
   },
   lcu: { installDir: '', port: '', token: '' },
+  cloud: {
+    url: 'https://match.alonglfb.com',
+    token: 'along-lol-2026',
+  },
   aliases: {}, // key(puuid 或 名称) -> 别名
 };
 
@@ -74,6 +78,7 @@ function getSettings() {
     ...s,
     openai: { ...DEFAULT_SETTINGS.openai, ...(s.openai || {}) },
     lcu: { ...DEFAULT_SETTINGS.lcu, ...(s.lcu || {}) },
+    cloud: { ...DEFAULT_SETTINGS.cloud, ...(s.cloud || {}) },
     aliases: { ...(s.aliases || {}) },
   };
 }

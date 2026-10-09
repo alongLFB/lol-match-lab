@@ -81,17 +81,17 @@ export function headerHtml(view) {
       </div>
     </div>
     <div class="toolbar">
-      <a class="btn" href="/api/match/${d.gameId}/raw?part=bundle&download=1" download>⬇ 导出完整数据</a>
-      <a class="btn ghost" href="/api/match/${d.gameId}/raw?part=game&download=1" download>对局 JSON</a>
-      <a class="btn ghost" href="/api/match/${d.gameId}/raw?part=timeline&download=1" download>时间线 JSON</a>
-      <a class="btn ghost" href="/api/match/${d.gameId}/raw?part=digest&download=1" download>加工摘要 JSON</a>
+      <button class="btn sm" id="btnUploadCloud" style="background:#0284c7;border-color:#0369a1;color:#fff" title="一键同步至 SA1 云端服务器">☁️ 上传至云端</button>
+      <a class="btn sm ghost" href="/api/match/${d.gameId}/export" download title="导出单场完整对局包(包含对局数据、时间线与 AI 复盘报告)">⬇ 导出完整包</a>
+      <a class="btn sm ghost" href="/api/match/${d.gameId}/raw?part=bundle&download=1" download title="原始 LCU Bundle">LCU 数据</a>
+      <a class="btn sm ghost" href="/api/match/${d.gameId}/raw?part=digest&download=1" download>分路摘要 JSON</a>
       <span class="spacer"></span>
       <button class="btn sm" id="btnShareMatchHeader" style="background:#1e6fd9;border-color:#2d7be5" title="一键生成微信分享战报长图">📸 微信分享长图</button>
-      <button class="btn ghost" id="refreshMatch" title="重新从 LCU 拉取">↻ 重新拉取${isSnap ? '/转为官方战绩' : ''}</button>
+      <button class="btn sm ghost" id="refreshMatch" title="重新从 LCU 拉取">↻ 重新拉取${isSnap ? '/转为官方战绩' : ''}</button>
       ${
         view.inInnerwar
-          ? '<span class="chip ok">已加入内战记录</span> <button class="btn ghost" id="rmIw">移出</button>'
-          : '<button class="btn" id="addIw">+ 加入内战记录</button>'
+          ? '<span class="chip ok">已加入内战记录</span> <button class="btn sm ghost" id="rmIw">移出</button>'
+          : '<button class="btn sm" id="addIw">+ 加入内战记录</button>'
       }
     </div>
   </div>`;
@@ -559,6 +559,24 @@ export async function render(app, [id, tabArg], alive) {
     const shareHeader = $('#btnShareMatchHeader');
     if (shareHeader) {
       shareHeader.onclick = () => generateMatchPoster(view, view.ai);
+    }
+    const uploadCloud = $('#btnUploadCloud');
+    if (uploadCloud) {
+      uploadCloud.onclick = async () => {
+        uploadCloud.disabled = true;
+        uploadCloud.textContent = '☁️ 正在上传…';
+        try {
+          const res = await post(`/api/match/${id}/cloud-upload`, {});
+          toast('✓ 上传云端成功！', 'ok');
+          alert(`🎉 对局 #${id} 已成功上传至 SA1 云端！\n\n云端访问链接：\n${res.cloudUrl}\n\n您可以在 SA1 云端管理后台决定是否在前台展示该对局。`);
+        } catch (e) {
+          toast('上传失败: ' + e.message, 'bad');
+          alert('上传云端失败: ' + e.message + '\n\n提示：请确认已在「设置」中配置正确的 SA1 云端地址与密钥，且云端服务正在运行。');
+        } finally {
+          uploadCloud.disabled = false;
+          uploadCloud.textContent = '☁️ 上传至云端';
+        }
+      };
     }
     $('#refreshMatch').onclick = async () => {
       toast('正在重新拉取…');

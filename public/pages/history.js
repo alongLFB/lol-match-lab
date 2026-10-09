@@ -63,7 +63,8 @@ export function rowHtml(g) {
     <td class="num">${fmtDur(g.gameDuration)}</td>
     <td class="nowrap actions">
       <a class="btn sm" href="#/match/${g.gameId}">详情</a>
-      <a class="btn sm ghost" href="/api/match/${g.gameId}/raw?part=bundle&download=1" download title="导出该场对局原始数据(对局+时间线)">导出</a>
+      <a class="btn sm ghost" href="/api/match/${g.gameId}/export" download title="导出单场完整数据包(包含对局+时间线+AI复盘)">导出</a>
+      <button class="btn sm ghost upload-cloud" data-id="${g.gameId}" title="上传至 SA1 云端服务器">☁️ 云端</button>
       ${g.inInnerwar ? '<span class="chip ok">已入内战</span>' : `<button class="btn sm ghost add-iw" data-id="${g.gameId}">+内战</button>`}
     </td></tr>`;
 }
@@ -119,6 +120,8 @@ export async function render(app, _p, alive) {
 
       <span class="spacer"></span>
       <button class="btn" id="btnImportGame">📥 导入对局 (Game ID)</button>
+      <button class="btn ghost" id="btnImportJsonFile" title="从本地选取 .json 文件直接导入对局">📂 导入本地 JSON</button>
+      <input type="file" id="fileJsonPicker" accept=".json,application/json" style="display:none">
     </div>
 
     <!-- 快捷选手切换 chips -->
@@ -256,6 +259,26 @@ export async function render(app, _p, alive) {
     });
   });
 
+  // 导入本地 JSON 文件
+  const filePicker = $('#fileJsonPicker');
+  $('#btnImportJsonFile')?.addEventListener('click', () => filePicker?.click());
+  filePicker?.addEventListener('change', async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      toast('正在读取并导入 JSON 文件…');
+      const text = await file.text();
+      const json = JSON.parse(text);
+      const res = await post('/api/match/import-json', json);
+      toast(`✓ 成功导入对局 #${res.gameId}`, 'ok');
+      filePicker.value = '';
+      location.hash = '#/match/' + res.gameId;
+    } catch (err) {
+      toast('导入 JSON 失败: ' + err.message, 'error', 6000);
+      filePicker.value = '';
+    }
+  });
+
   // 快捷选手切换
   $$('.rec-chip, .spec-chip').forEach((chip) => {
     chip.onclick = async () => {
@@ -311,7 +334,23 @@ export async function render(app, _p, alive) {
     paint();
   };
   $('#addSel').onclick = () => addIds([...state.sel]);
-  $('#rows').onclick = (e) => {
+  $('#rows').onclick = async (e) => {
+    const up = e.target.closest('.upload-cloud');
+    if (up) {
+      const id = Number(up.dataset.id);
+      up.disabled = true;
+      up.textContent = '☁️…';
+      try {
+        const res = await post(`/api/match/${id}/cloud-upload`, {});
+        toast(`✓ 对局 #${id} 已成功上传至云端！`, 'ok');
+        up.textContent = '☁️已传';
+      } catch (err) {
+        toast(`上传失败: ${err.message}`, 'error');
+        up.textContent = '☁️重试';
+        up.disabled = false;
+      }
+      return;
+    }
     const b = e.target.closest('.add-iw');
     if (b) return addIds([Number(b.dataset.id)]);
     const cb = e.target.closest('.sel');

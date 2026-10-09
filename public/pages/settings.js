@@ -7,6 +7,7 @@ export async function render(app, _p, alive) {
   if (!alive()) return;
   const o = s.openai;
   const l = s.lcu;
+  const c = s.cloud || { url: 'https://match.alonglfb.com', token: 'along-lol-2026' };
   app.innerHTML = `
   <section class="card"><h2>LCU 连接</h2>
     <p>状态:${st.connected ? `<span class="chip ok">已连接</span> ${esc(st.summoner.gameName)}#${esc(st.summoner.tagLine)} · 端口 ${st.creds.port} · 来源 ${esc(st.creds.source)}` : `<span class="chip bad">未连接</span> <span class="muted">${esc(st.error || '未找到 LeagueClientUx 进程')}</span>`}</p>
@@ -30,6 +31,14 @@ export async function render(app, _p, alive) {
     <div class="toolbar"><button class="btn" id="saveAi">保存</button><button class="btn ghost" id="testAi">测试连接</button>
       ${o.hasKey ? '<button class="btn ghost" id="clearKey">清除已保存的 Key</button>' : ''}<span id="aiMsg" class="muted"></span></div>
     <p class="muted small">API Key 仅保存在本机数据目录的 settings.json 中,只会发往你填写的 Base URL。兼容 OpenAI Chat Completions 协议的第三方/自建服务均可使用。</p></section>
+
+  <section class="card"><h2>☁️ 云端同步设置 (SA1 服务器)</h2>
+    <div class="form">
+      <label>云端服务根地址 (Cloud URL)<input id="c_url" value="${esc(c.url)}" placeholder="https://match.alonglfb.com"></label>
+      <label>上传认证密钥 (Upload Token)<input id="c_token" value="${esc(c.token)}" type="password" placeholder="along-lol-2026"></label>
+    </div>
+    <div class="toolbar"><button class="btn" id="saveCloud">保存云端设置</button><button class="btn ghost" id="testCloud">测试云端连接</button><span id="cloudMsg" class="muted"></span></div>
+    <p class="muted small">配置 SA1 云端接收接口。在对局详情或战绩列表中点击「☁️ 上传云端」，即可将比赛数据与 AI 深度复盘一键同步至云端对局库，并在云端管理后台决定哪些对局在前台展示。</p></section>
 
   <section class="card"><h2>本地数据</h2>
     <p>数据目录:<code>${esc(s.dataDir)}</code></p>
@@ -57,7 +66,7 @@ export async function render(app, _p, alive) {
   $('#clearKey')?.addEventListener('click', async () => {
     await put('/api/settings', { openai: { clearKey: true } });
     location.reload();
-  });
+  };
   $('#testAi').onclick = async () => {
     $('#aiMsg').textContent = '测试中…(请先保存)';
     try {
@@ -65,6 +74,28 @@ export async function render(app, _p, alive) {
       $('#aiMsg').innerHTML = `<span class="ok-t">✓ 连接成功,模型 ${esc(r.model)}</span>`;
     } catch (e) {
       $('#aiMsg').innerHTML = `<span class="error">${esc(e.message)}</span>`;
+    }
+  };
+
+  $('#saveCloud').onclick = async () => {
+    await put('/api/settings', {
+      cloud: {
+        url: $('#c_url').value.trim(),
+        token: $('#c_token').value.trim(),
+      },
+    });
+    toast('云端设置已保存', 'ok');
+  };
+  $('#testCloud').onclick = async () => {
+    $('#cloudMsg').textContent = '正在测试连接…';
+    try {
+      const r = await post('/api/cloud/test', {
+        url: $('#c_url').value.trim(),
+        token: $('#c_token').value.trim(),
+      });
+      $('#cloudMsg').innerHTML = `<span class="ok-t">✓ 连接成功 (${esc(r.data?.name || '云端服务在线')})</span>`;
+    } catch (e) {
+      $('#cloudMsg').innerHTML = `<span class="error">${esc(e.message)}</span>`;
     }
   };
 }
