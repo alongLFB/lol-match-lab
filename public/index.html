@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>LoL Match Lab</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚔️</text></svg>">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header id="topbar">
+    <a class="brand" href="#/history">⚔️ LoL Match Lab</a>
+    <nav id="nav">
+      <a href="#/history" data-r="history">对局历史</a>
+      <a href="#/innerwar" data-r="innerwar">内战统计</a>
+      <a href="#/lcu" data-r="lcu">LCU 浏览器</a>
+      <a href="#/settings" data-r="settings">设置</a>
+    </nav>
+    <div style="display:flex;align-items:center;gap:8px">
+      <button id="btnQuickSnaps" class="btn sm ghost" title="查看比赛中途与退场实时快照">📸 快照库</button>
+      <div id="conn" class="conn off" title="LCU 连接状态">连接中…</div>
+    </div>
+  </header>
+  <main id="app"></main>
+  <script type="module" src="app.js"></script>
+</body>
+</html>
