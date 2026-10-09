@@ -66,7 +66,7 @@ export async function render(app, _p, alive) {
   $('#clearKey')?.addEventListener('click', async () => {
     await put('/api/settings', { openai: { clearKey: true } });
     location.reload();
-  };
+  });
   $('#testAi').onclick = async () => {
     $('#aiMsg').textContent = '测试中…(请先保存)';
     try {
