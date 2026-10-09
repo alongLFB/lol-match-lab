@@ -1,7 +1,7 @@
 import {
   G, $, $$, esc, api, post, put, toast, fmtDate, fmtDur, fmtMs, fmtNum, fmtK, pct, queueName, mapName, teamName, teamCls, dispName,
   champIcon, champName, itemIcon, spellIcon, perkIcon, styleIcon, augmentIcon, profileIcon, pctBar, lineChart, jsonTreeHtml, bindJsonTrees,
-  resultBadge,
+  resultBadge, regionBadge, regionInfo,
 } from '../util.js';
 import { generateMatchPoster } from '../poster.js';
 import { STAT_GROUPS, KNOWN_KEYS, isItemKey, isPerkKey, isAugKey, TEAM_FIELDS, TEAM_FIRSTS, GAME_FIELDS } from '../statdefs.js';
@@ -56,12 +56,10 @@ export function headerHtml(view) {
     }
     <div class="mh-top">
       <div>
-        <h2>${esc(queueName(d.queueId, d.gameMode))} <span class="muted">· ${esc(mapName(d.mapId))}</span> ${
+        <h2>${regionBadge(d.platformId, d.gameId)} ${esc(queueName(d.queueId, d.gameMode))} <span class="muted">· ${esc(mapName(d.mapId))}</span> ${
           d.isCustom ? '<span class="chip custom">自定义</span>' : ''
         } ${isSnap ? '<span class="chip gold">📸 快照</span>' : ''}</h2>
-        <div class="muted">${fmtDate(d.gameCreation)} · 时长 ${fmtDur(d.gameDuration)} · 版本 ${esc(d.gameVersion)} · ${esc(
-          d.platformId
-        )} · 对局 #${d.gameId}
+        <div class="muted">${fmtDate(d.gameCreation)} · 时长 ${fmtDur(d.gameDuration)} · 版本 ${esc(d.gameVersion)} · 对局 #${d.gameId}
         ${d.endOfGameResult && d.endOfGameResult !== 'GameComplete' ? ` · <span class="warn-t">${esc(d.endOfGameResult)}</span>` : ''}</div>
       </div>
       <div class="mh-result">

@@ -1,11 +1,13 @@
 import {
   G, $, $$, esc, api, post, toast, fmtDate, fmtDur, fmtK, pct, kdaStr, kdaRatio,
   champIcon, champName, itemIcon, spellIcon, queueName, resultBadge, profileIcon, showImportModal,
+  regionBadge, regionInfo, REGION_MAP,
 } from '../util.js';
 
 const state = {
   days: 7,
   customDays: '',
+  region: '',
   onlyCustom: false,
   onlyImported: false,
   queue: '',
@@ -39,19 +41,21 @@ export function filtered() {
     (g) =>
       (!state.onlyCustom || g.isCustom) &&
       (!state.onlyImported || g.isSpectated || g.isLocalImport) &&
+      (!state.region || regionInfo(g.platformId, g.gameId)?.key === state.region) &&
       (!state.queue || String(g.queueId) === state.queue) &&
       (!state.result || (state.result === 'win' ? g.win : !g.win))
   );
 }
 
 export function rowHtml(g) {
+  const regBadge = regionBadge(g.platformId, g.gameId);
   const customBadge = g.isCustom ? ' <span class="chip custom">自定义</span>' : '';
   const specBadge = (g.isSpectated || g.isLocalImport) ? ' <span class="chip gold" title="观战采集或本地导入">观战/导入</span>' : '';
   const resultDisplay = g.isSpectated ? '<span class="badge" style="background:#1e293b;color:#93c5fd">观战</span>' : resultBadge(g.win, g.remake);
   return `<tr data-id="${g.gameId}" class="${g.isSpectated ? '' : (g.win ? 'rw' : 'rl')}">
     <td><input type="checkbox" class="sel" data-id="${g.gameId}" ${state.sel.has(g.gameId) ? 'checked' : ''}></td>
     <td class="nowrap">${fmtDate(g.gameCreation)}</td>
-    <td>${esc(queueName(g.queueId, g.gameMode))}${customBadge}${specBadge}</td>
+    <td>${regBadge ? regBadge + ' ' : ''}${esc(queueName(g.queueId, g.gameMode))}${customBadge}${specBadge}</td>
     <td>${resultDisplay}</td>
     <td class="nowrap">${champIcon(g.championId, 'sm')} <span class="muted">${esc(champName(g.championId))}</span></td>
     <td class="nowrap">${g.spells.map((s) => spellIcon(s)).join('')}</td>
@@ -75,13 +79,20 @@ export function summaryHtml(list) {
   const k = list.reduce((a, g) => a + g.kills, 0);
   const d = list.reduce((a, g) => a + g.deaths, 0);
   const as = list.reduce((a, g) => a + g.assists, 0);
+  const regCounts = {};
+  list.forEach((g) => {
+    const r = regionInfo(g.platformId, g.gameId);
+    const key = r ? `${r.flag} ${r.name}` : '其他';
+    regCounts[key] = (regCounts[key] || 0) + 1;
+  });
+  const regDist = Object.entries(regCounts).map(([k, v]) => `${k} ${v}场`).join(' · ');
   return `<div class="stats">
     <div class="stat"><b>${n}</b><span>对局数</span></div>
     <div class="stat"><b>${w}-${n - w}</b><span>胜-负</span></div>
     <div class="stat"><b>${n ? pct(w / n) : '-'}</b><span>胜率</span></div>
     <div class="stat"><b>${n ? (k / n).toFixed(1) : 0}/${n ? (d / n).toFixed(1) : 0}/${n ? (as / n).toFixed(1) : 0}</b><span>场均 KDA</span></div>
     <div class="stat"><b>${kdaRatio(k, d, as)}</b><span>总 KDA 比</span></div>
-    <div class="stat"><b>${list.filter((g) => g.isCustom).length}</b><span>自定义对局</span></div>
+    <div class="stat"><b>${regDist || '-'}</b><span>服务器分布</span></div>
   </div>`;
 }
 
@@ -158,6 +169,11 @@ export async function render(app, _p, alive) {
         </select>
       </label>
       <input id="customDays" type="number" min="1" placeholder="天数" style="width:80px;${state.days === 'custom' ? '' : 'display:none'}" value="${esc(state.customDays)}">
+      <label>服务器
+        <select id="region">
+          <option value="">全部服务器</option>
+        </select>
+      </label>
       <label>模式 <select id="queue"><option value="">全部</option></select></label>
       <label>结果 <select id="result"><option value="">全部</option><option value="win">胜利</option><option value="loss">失败</option></select></label>
       <label class="chk"><input type="checkbox" id="onlyCustom" ${state.onlyCustom ? 'checked' : ''}> 仅自定义(内战)</label>
@@ -206,6 +222,20 @@ export async function render(app, _p, alive) {
     }
     if (!alive()) return;
     $('#offline').style.display = state.data.offline ? '' : 'none';
+    const regSel = $('#region');
+    const presentRegs = new Map();
+    state.data.games.forEach((g) => {
+      const r = regionInfo(g.platformId, g.gameId);
+      if (r) presentRegs.set(r.key, r);
+    });
+    if (!presentRegs.has('EUW')) presentRegs.set('EUW', REGION_MAP.EUW);
+    if (!presentRegs.has('ME')) presentRegs.set('ME', REGION_MAP.ME);
+    let regOpts = '<option value="">全部服务器</option>';
+    presentRegs.forEach((r) => {
+      regOpts += `<option value="${r.key}" ${state.region === r.key ? 'selected' : ''}>${r.flag} ${r.full}</option>`;
+    });
+    regSel.innerHTML = regOpts;
+
     const qsel = $('#queue');
     const qids = [...new Set(state.data.games.map((g) => g.queueId))];
     qsel.innerHTML =
@@ -305,6 +335,7 @@ export async function render(app, _p, alive) {
     state.customDays = e.target.value;
     load();
   };
+  $('#region').onchange = (e) => ((state.region = e.target.value), paint());
   $('#queue').onchange = (e) => ((state.queue = e.target.value), paint());
   $('#result').onchange = (e) => ((state.result = e.target.value), paint());
   $('#onlyCustom').onchange = (e) => ((state.onlyCustom = e.target.checked), paint());

@@ -171,7 +171,7 @@ function buildDigest(bundle) {
     gameType: g.gameType,
     mapId: g.mapId,
     gameVersion: g.gameVersion,
-    platformId: g.platformId,
+    platformId: g.platformId || (g.gameId > 5000000000 ? 'EUW1' : (g.gameId > 10000000 && g.gameId < 50000000 ? 'ME1' : '')),
     endOfGameResult: g.endOfGameResult,
     isCustom: g.gameType === 'CUSTOM_GAME',
     teams,

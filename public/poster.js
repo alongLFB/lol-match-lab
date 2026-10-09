@@ -1,5 +1,5 @@
 // 微信分享长图海报生成器 (Mobile Poster Generator for WeChat)
-import { esc, fmtDur, fmtDate, fmtNum, fmtK, pct, champName, teamName, toast, openModal, dispName, G } from './util.js';
+import { esc, fmtDur, fmtDate, fmtNum, fmtK, pct, champName, teamName, toast, openModal, dispName, G, regionInfo } from './util.js';
 
 function loadImage(src) {
   return new Promise((resolve) => {
@@ -292,7 +292,9 @@ export async function generateMatchPoster(view, aiResult) {
   ctx.fillStyle = '#7f90a3';
   const durStr = fmtDur(d.gameDuration || game.gameDuration || 0);
   const dateStr = fmtDate(d.gameCreation || game.gameCreation || Date.now());
-  ctx.fillText(`比赛时长: ${durStr}   |   时间: ${dateStr}   |   模式: ${game.gameMode || 'CLASSIC'}`, 32, curY);
+  const reg = regionInfo(d.platformId || game.platformId, d.gameId || view.gameId);
+  const regStr = reg ? `${reg.flag} ${reg.full}   |   ` : '';
+  ctx.fillText(`${regStr}时长: ${durStr}   |   时间: ${dateStr}   |   模式: ${game.gameMode || 'CLASSIC'}`, 32, curY);
 
   curY += 26;
 

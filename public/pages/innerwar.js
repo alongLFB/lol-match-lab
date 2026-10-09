@@ -1,10 +1,10 @@
 import {
   G, $, $$, esc, api, post, put, del, toast, fmtDate, fmtDay, fmtDur, fmtNum, fmtK, pct, dispName, champIcon, champName, teamName, teamCls, pctBar,
-  showImportModal,
+  showImportModal, regionBadge, regionInfo,
 } from '../util.js';
 import { generateInnerwarPoster } from '../poster.js';
 
-const state = { since: 0, sinceDays: 0, sort: 'games', dir: -1, matrix: 'with', data: null };
+const state = { since: 0, sinceDays: 0, region: '', sort: 'games', dir: -1, matrix: 'with', data: null };
 
 const nameOf = (p) => G.aliases[p.key] || p.alias || p.name;
 let curStats = null;
@@ -116,7 +116,7 @@ export function championsHtml(st) {
 
 export function recordsHtml(st) {
   return st.matches.map((m) => `<div class="rec" data-id="${m.gameId}">
-    <div class="rec-head"><a href="#/match/${m.gameId}"><b>${fmtDate(m.date)}</b></a><span class="muted">${fmtDur(m.duration)} · #${m.gameId}</span>
+    <div class="rec-head">${regionBadge(m.platformId, m.gameId)} <a href="#/match/${m.gameId}"><b>${fmtDate(m.date)}</b></a><span class="muted">${fmtDur(m.duration)} · #${m.gameId}</span>
       <input class="note" data-id="${m.gameId}" placeholder="备注(如:第3场/赌注/BO3)" value="${esc(m.note)}">
       <span class="spacer"></span><a class="btn sm ghost" href="#/match/${m.gameId}">详情</a><button class="btn sm ghost rm" data-id="${m.gameId}">移出</button></div>
     <div class="rec-teams">${m.teams.map((t) => `<div class="rt ${teamCls(t.teamId)} ${t.win ? 'won' : ''}"><div class="rt-title">${teamName(t.teamId)} ${t.win ? '🏆 胜' : '败'} <small class="muted">${m.kills[t.teamId]} 杀</small></div>
@@ -171,7 +171,10 @@ export function aiHtml(r) {
 export async function render(app, _p, alive) {
   const load = async () => {
     state.since = state.sinceDays ? Date.now() - state.sinceDays * 86400000 : 0;
-    state.data = await api('/api/innerwar?since=' + state.since);
+    const qs = new URLSearchParams();
+    if (state.since) qs.set('since', state.since);
+    if (state.region) qs.set('region', state.region);
+    state.data = await api('/api/innerwar?' + qs.toString());
     G.aliases = state.data.aliases || G.aliases;
     setStats(state.data.stats);
   };
@@ -183,6 +186,11 @@ export async function render(app, _p, alive) {
     app.innerHTML = `
     <section class="card"><div class="toolbar">
       <h2 style="margin:0">内战统计</h2>
+      <label>服务器 <select id="iwRegion">
+        <option value="">全部服务器</option>
+        <option value="EUW" ${state.region === 'EUW' ? 'selected' : ''}>🇪🇺 欧服 (EUW)</option>
+        <option value="ME" ${state.region === 'ME' ? 'selected' : ''}>🇦🇪 中东服 (ME)</option>
+      </select></label>
       <label>统计范围 <select id="since">${[[0, '全部'], [7, '最近 7 天'], [30, '最近 30 天'], [90, '最近 90 天']].map(([v, l]) => `<option value="${v}" ${state.since === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
       <span class="spacer"></span>
       <button class="btn sm" id="btnShareInnerwarTop" style="background:#1e6fd9;border-color:#2d7be5" title="一键生成朋友圈内战风云长图">📸 微信分享风云榜</button>
@@ -209,6 +217,15 @@ export async function render(app, _p, alive) {
   const origPaint = paint;
   const paint2 = () => {
     origPaint();
+    const rSel = $('#iwRegion');
+    if (rSel) {
+      rSel.value = state.region;
+      rSel.onchange = async (e) => {
+        state.region = e.target.value;
+        await load();
+        paint2();
+      };
+    }
     const sel = $('#since');
     if (sel) {
       sel.value = String(state.sinceDays);

@@ -112,6 +112,36 @@ export const profileIcon = (id) =>
 export const resultBadge = (win, remake) =>
   remake ? '<span class="badge remake">重开</span>' : win ? '<span class="badge win">胜利</span>' : '<span class="badge loss">失败</span>';
 
+// 服务器与大区定义
+export const REGION_MAP = {
+  EUW1: { key: 'EUW', code: 'EUW1', name: '欧服', full: '西欧服 (EUW)', flag: '🇪🇺', color: '#38bdf8' },
+  EUW: { key: 'EUW', code: 'EUW1', name: '欧服', full: '西欧服 (EUW)', flag: '🇪🇺', color: '#38bdf8' },
+  ME1: { key: 'ME', code: 'ME1', name: '中东服', full: '中东服 (ME)', flag: '🇦🇪', color: '#34d399' },
+  ME: { key: 'ME', code: 'ME1', name: '中东服', full: '中东服 (ME)', flag: '🇦🇪', color: '#34d399' },
+  EUN1: { key: 'EUNE', code: 'EUN1', name: '东欧服', full: '北欧与东欧 (EUNE)', flag: '🇪🇺', color: '#60a5fa' },
+  NA1: { key: 'NA', code: 'NA1', name: '美服', full: '北美服 (NA)', flag: '🇺🇸', color: '#f87171' },
+  KR: { key: 'KR', code: 'KR', name: '韩服', full: '韩服 (KR)', flag: '🇰🇷', color: '#fb923c' },
+  TW2: { key: 'TW', code: 'TW2', name: '台服', full: '中国台湾 (TW)', flag: '🇹🇼', color: '#f472b6' },
+  SG2: { key: 'SG', code: 'SG2', name: '新马服', full: '新加坡 (SG)', flag: '🇸🇬', color: '#a78bfa' },
+  JP1: { key: 'JP', code: 'JP1', name: '日服', full: '日本服 (JP)', flag: '🇯🇵', color: '#fb7185' },
+};
+
+export function regionInfo(platformId, gameId) {
+  let pid = String(platformId || '').toUpperCase();
+  if (!pid && gameId) {
+    const gid = Number(gameId);
+    if (gid > 5000000000) pid = 'EUW1';
+    else if (gid > 10000000 && gid < 50000000) pid = 'ME1';
+  }
+  return REGION_MAP[pid] || (pid ? { key: pid, code: pid, name: pid, full: pid, flag: '🌐', color: '#94a3b8' } : null);
+}
+
+export function regionBadge(platformId, gameId) {
+  const r = regionInfo(platformId, gameId);
+  if (!r) return '';
+  return `<span class="chip region ${r.key.toLowerCase()}" title="${esc(r.full)}">${r.flag} ${esc(r.name)}</span>`;
+}
+
 export const pctBar = (v, max = 1, cls = '') =>
   `<span class="bar ${cls}"><i style="width:${Math.min(100, Math.max(0, (v / (max || 1)) * 100)).toFixed(1)}%"></i></span>`;
 

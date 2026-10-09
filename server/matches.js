@@ -135,6 +135,7 @@ function summarizeListGame(g, puuid) {
     cached,
     isSpectated,
     isLocalImport: !!g._isLocalImport,
+    platformId: g.platformId || (cached ? (store.readJson(`matches/${g.gameId}.json`)?.game?.platformId || '') : '') || (g.gameId > 5000000000 ? 'EUW1' : (g.gameId > 10000000 && g.gameId < 50000000 ? 'ME1' : '')),
   };
 }
 

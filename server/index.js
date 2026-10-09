@@ -467,7 +467,8 @@ route('POST', '/api/cloud/test', async ({ body }) => {
 // 内战
 route('GET', '/api/innerwar', async ({ q }) => {
   const since = Number(q.get('since') || 0);
-  return { records: innerwar.list(), stats: innerwar.stats({ since }), ai: ai.cachedInnerwarAnalysis(), aliases: store.getSettings().aliases };
+  const region = q.get('region') || '';
+  return { records: innerwar.list(), stats: innerwar.stats({ since, region }), ai: ai.cachedInnerwarAnalysis(), aliases: store.getSettings().aliases };
 });
 route('POST', '/api/innerwar', async ({ body }) => {
   const ids = Array.isArray(body.gameIds) ? body.gameIds : [body.gameId];

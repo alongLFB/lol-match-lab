@@ -58,7 +58,7 @@ function setNote(gameId, note) {
   save(d);
 }
 
-function stats({ since = 0 } = {}) {
+function stats({ since = 0, region = '' } = {}) {
   const { records } = load();
   const aliases = store.getSettings().aliases;
   const players = new Map();
@@ -109,6 +109,11 @@ function stats({ since = 0 } = {}) {
     const dg = matches.digestOf(b);
     if (!dg) continue;
     if (since && dg.gameCreation < since) continue;
+    if (region) {
+      const reg = dg.platformId || (dg.gameId > 5000000000 ? 'EUW1' : (dg.gameId > 10000000 && dg.gameId < 50000000 ? 'ME1' : ''));
+      const regKey = reg.startsWith('EUW') ? 'EUW' : reg.startsWith('ME') ? 'ME' : reg;
+      if (regKey !== region) continue;
+    }
     rows.push({ r, dg });
   }
   rows.sort((a, b) => a.dg.gameCreation - b.dg.gameCreation);
@@ -182,6 +187,7 @@ function stats({ since = 0 } = {}) {
     const best = dg.players.reduce((m, p) => (p.score > m.score ? p : m), dg.players[0]);
     matchRows.push({
       gameId: dg.gameId,
+      platformId: dg.platformId || (dg.gameId > 5000000000 ? 'EUW1' : (dg.gameId > 10000000 && dg.gameId < 50000000 ? 'ME1' : '')),
       date: dg.gameCreation,
       duration: dg.gameDuration,
       note: r.note || '',
