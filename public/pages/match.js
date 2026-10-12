@@ -124,12 +124,13 @@ export function objectivesHtml(d) {
   </div>`;
 }
 
-function playerCell(p) {
+function playerCell(p, d) {
+  const showLane = d ? (d.hasLanes !== false && !d.isAram && d.gameMode !== 'ARAM' && d.mapId !== 12) : (p.lane && p.lane !== 'NONE');
   return `<div class="pcell">${champIcon(p.championId, 'md')}<span class="lvl">${p.level}</span>
     <div><div class="pname"><a class="plink" title="${esc(p.name)}">${esc(dispName(p))}</a>
     <button class="icon-btn alias" data-key="${esc(p.key)}" data-name="${esc(p.name)}" title="设置别名">✎</button>
     ${p.badge ? `<span class="chip ${p.badge === 'MVP' ? 'gold' : 'silver'}">${p.badge}</span>` : ''}</div>
-    <div class="muted small">${esc(champName(p.championId))}${p.lane ? ' · <span class="chip lane">' + esc(p.laneCn || p.lane) + '</span>' : ''}</div></div></div>`;
+    <div class="muted small">${esc(champName(p.championId))}${showLane && p.lane ? ' · <span class="chip lane">' + esc(p.laneCn || p.lane) + '</span>' : ''}</div></div></div>`;
 }
 
 export function scoreboardHtml(d) {
@@ -154,7 +155,7 @@ export function scoreboardHtml(d) {
       <tbody>${g.list
         .map(
           (p) => `<tr>
-        <td>${playerCell(p)}</td>
+        <td>${playerCell(p, d)}</td>
         <td class="nowrap"><div class="stack">${p.spells.map((s) => spellIcon(s)).join('')}</div>${hasRune ? `<div class="stack">${styleIcon(p.perkPrimaryStyle)}${perkIcon(p.perks[0])}${styleIcon(p.perkSubStyle)}</div>` : ''}</td>
         ${hasAug ? `<td class="nowrap">${p.augments.map((a) => augmentIcon(a)).join('')}</td>` : ''}
         <td class="nowrap"><b>${p.kills}/${p.deaths}/${p.assists}</b><div class="muted small">${p.kda} KDA${p.largestMultiKill >= 2 ? ` · ${['', '', '双杀', '三杀', '四杀', '五杀'][Math.min(5, p.largestMultiKill)]}` : ''}</div></td>
@@ -423,6 +424,7 @@ export function aiResultHtml(r, d) {
   if (!a) return `<div class="card">${meta}<h3>模型原始输出(未能解析为 JSON)</h3><pre class="pre">${esc(r.raw)}</pre></div>`;
   const byName = Object.fromEntries(d.players.map((p) => [dispName(p), p]));
   const li = (arr) => (arr || []).map((x) => `<li>${esc(x)}</li>`).join('');
+  const isAram = d.isAram || d.gameMode === 'ARAM' || d.mapId === 12 || d.queueId === 450;
   return `<div class="card">${meta}
     <h3>总评</h3><p>${esc(a.summary)}</p>
     ${a.turningPoints?.length ? `<h4>关键转折</h4><ul>${li(a.turningPoints)}</ul>` : ''}
@@ -430,9 +432,10 @@ export function aiResultHtml(r, d) {
   <div class="ai-grid">${(a.players || [])
     .map((p) => {
       const dp = byName[p.name] || d.players.find((x) => p.name && (x.name.startsWith(p.name) || p.name.startsWith(x.name)));
-      const laneTag = p.lane || dp?.laneCn || dp?.lane || '';
+      const tag = isAram ? (p.role || '') : (p.lane || dp?.laneCn || dp?.lane || '');
+      const tagCls = isAram ? 'chip gold' : 'chip lane';
       return `<div class="card aip ${dp ? teamCls(dp.teamId) : ''}">
-      <div class="aip-head">${dp ? champIcon(dp.championId, 'md') : ''}<div><b>${esc(p.name)}</b><div class="muted small">${esc(p.champion || '')}${laneTag ? ' · <span class="chip lane">' + esc(laneTag) + '</span>' : ''} · ${esc(p.team || '')}${dp ? ` · ${dp.kills}/${dp.deaths}/${dp.assists}` : ''}</div></div>
+      <div class="aip-head">${dp ? champIcon(dp.championId, 'md') : ''}<div><b>${esc(p.name)}</b><div class="muted small">${esc(p.champion || '')}${tag ? ' · <span class="' + tagCls + '">' + esc(tag) + '</span>' : ''} · ${esc(p.team || '')}${dp ? ` · ${dp.kills}/${dp.deaths}/${dp.assists}` : ''}</div></div>
         <div class="grade ${gradeCls(p.grade)}">${esc(p.grade || '')}<small>${esc(p.rating ?? '')}</small></div></div>
       <p class="verdict">${esc(p.verdict)}</p>
       <h5>👍 优点</h5><ul>${li(p.strengths)}</ul><h5>👎 不足</h5><ul>${li(p.weaknesses)}</ul><h5>💡 建议</h5><ul>${li(p.advice)}</ul></div>`;

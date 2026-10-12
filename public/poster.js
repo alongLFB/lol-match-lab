@@ -129,6 +129,7 @@ export async function generateMatchPoster(view, aiResult) {
   const game = view.game || {};
   const ai = aiResult?.analysis || null;
   const players = d.players || [];
+  const isAram = !!(d.isAram || d.gameMode === 'ARAM' || d.mapId === 12 || d.queueId === 450);
 
   // 1. 预加载英雄头像
   const champImgs = {};
@@ -378,7 +379,9 @@ export async function generateMatchPoster(view, aiResult) {
   const bDmg = blueTeam.dmg || 0;
   const rDmg = redTeam.dmg || 0;
   const dmgPart = bDmg > 0 || rDmg > 0 ? `伤害 ${fmtK(bDmg)} : ${fmtK(rDmg)}   |   ` : '';
-  const objText = `${dmgPart}推塔 ${bObj.towerKills ?? 0} : ${rObj.towerKills ?? 0}   |   小龙 ${bObj.dragonKills ?? 0} : ${rObj.dragonKills ?? 0}   |   大龙 ${bObj.baronKills ?? 0} : ${rObj.baronKills ?? 0}   |   补刀 ${blueTeam.cs ?? 0} : ${redTeam.cs ?? 0}`;
+  const objText = isAram
+    ? `${dmgPart}推塔 ${bObj.towerKills ?? 0} : ${rObj.towerKills ?? 0}   |   总击杀 ${blueTeam.kills ?? 0} : ${redTeam.kills ?? 0}   |   总补刀 ${blueTeam.cs ?? 0} : ${redTeam.cs ?? 0}`
+    : `${dmgPart}推塔 ${bObj.towerKills ?? 0} : ${rObj.towerKills ?? 0}   |   小龙 ${bObj.dragonKills ?? 0} : ${rObj.dragonKills ?? 0}   |   大龙 ${bObj.baronKills ?? 0} : ${rObj.baronKills ?? 0}   |   补刀 ${blueTeam.cs ?? 0} : ${redTeam.cs ?? 0}`;
 
   ctx.font = '11px -apple-system, sans-serif';
   ctx.fillStyle = '#94a3b8';
@@ -529,7 +532,7 @@ export async function generateMatchPoster(view, aiResult) {
     ctx.font = '12px -apple-system, sans-serif';
     ctx.fillStyle = '#7f90a3';
     const cName = ap?.champion || champName(dp.championId);
-    const laneTag = ap?.lane || dp.laneCn || dp.lane || '';
+    const laneTag = isAram ? (ap?.role || '') : (ap?.lane || dp.laneCn || dp.lane || '');
     const lanePrefix = laneTag ? `【${laneTag}】` : '';
     const kdaStr = dp.kills != null ? `KDA ${dp.kills}/${dp.deaths}/${dp.assists} (${dp.kda || 0})` : '';
     ctx.fillText(`${lanePrefix}${cName}   |   ${kdaStr}`, 104, curY + 48);

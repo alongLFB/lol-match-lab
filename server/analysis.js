@@ -21,12 +21,31 @@ function winOf(team) {
   return team?.win === 'Win' || team?.win === true;
 }
 
+function isAram(g = {}) {
+  const mode = String(g.gameMode || '').toUpperCase();
+  const mapId = Number(g.mapId || 0);
+  const queueId = Number(g.queueId || 0);
+  return mode === 'ARAM' || mapId === 12 || queueId === 450 || queueId === 100;
+}
+
+function hasStandardLanes(g = {}) {
+  if (isAram(g)) return false;
+  const mode = String(g.gameMode || '').toUpperCase();
+  const mapId = Number(g.mapId || 0);
+  const queueId = Number(g.queueId || 0);
+  if (mode === 'CHERRY' || mapId === 30 || queueId === 1700 || queueId === 1710) return false;
+  // 只有召唤师峡谷 (Summoner's Rift: mapId 11 或 CLASSIC 模式) 才有标准 5 分路
+  return mapId === 11 || mode === 'CLASSIC';
+}
+
 function buildDigest(bundle) {
   const g = bundle.game;
   if (!g) return null;
   const minutes = Math.max(1, num(g.gameDuration) / 60);
   const idMap = new Map((g.participantIdentities || []).map((i) => [i.participantId, i.player || {}]));
   const tlLane = {};
+  const isAramMode = isAram(g);
+  const hasLanes = hasStandardLanes(g);
 
   const players = (g.participants || []).map((p) => {
     const s = p.stats || {};
@@ -143,13 +162,15 @@ function buildDigest(bundle) {
     p.goldPerMin = round(p.gold / minutes, 0);
     p.visionPerMin = round(p.vision / minutes, 2);
     // 本地参考分(0-10),仅用于相对比较,不是官方评分
+    // 大乱斗等非视野模式不应因没有插眼视野而受到 -0.6 的惩罚扣分
+    const visionFactor = isAramMode ? 0 : clamp((p.visionPerMin - 0.8) * 0.8, -0.6, 0.8);
     const raw =
       5 +
       clamp((p.kda - 3) * 0.35, -2, 2.2) +
       clamp((p.kp - 0.5) * 3, -1.5, 1.5) +
       clamp((p.dmgShare - 0.2) * 7, -1.5, 2) +
       clamp((p.deathShare - 0.2) * -4, -1, 0.6) +
-      clamp((p.visionPerMin - 0.8) * 0.8, -0.6, 0.8) +
+      visionFactor +
       (p.win ? 0.6 : -0.2);
     p.score = round(clamp(raw, 0, 10), 1);
   }
@@ -160,7 +181,7 @@ function buildDigest(bundle) {
     if (best) best.badge = t.win ? 'MVP' : 'ACE';
   }
   const timelineDigest = buildTimelineDigest(bundle.timeline, players);
-  inferAndNormalizeLanes(players, timelineDigest);
+  inferAndNormalizeLanes(players, timelineDigest, g);
 
   return {
     gameId: g.gameId,
@@ -174,6 +195,8 @@ function buildDigest(bundle) {
     platformId: g.platformId || (g.gameId > 5000000000 ? 'EUW1' : (g.gameId > 10000000 && g.gameId < 50000000 ? 'ME1' : '')),
     endOfGameResult: g.endOfGameResult,
     isCustom: g.gameType === 'CUSTOM_GAME',
+    isAram: isAramMode,
+    hasLanes,
     teams,
     players,
     timeline: timelineDigest,
@@ -198,8 +221,17 @@ const LANE_CN = {
   SUPPORT: '辅助',
 };
 
-/** 智能推断与纠正每位玩家的分路与定位 (解决自定义对局 LCU 返回全 NONE 或全 SUPPORT 问题) */
-function inferAndNormalizeLanes(players, timelineDigest) {
+/** 智能推断与纠正每位玩家的分路与定位 (只在召唤师峡谷生效，大乱斗等模式不分配分路) */
+function inferAndNormalizeLanes(players, timelineDigest, gameMeta = {}) {
+  if (!hasStandardLanes(gameMeta)) {
+    // 极地大乱斗 (ARAM)、斗魂竞技场等特殊对战模式，全员无分路
+    for (const p of players) {
+      p.lane = '';
+      p.laneCn = '';
+    }
+    return;
+  }
+
   const teamIds = [...new Set(players.map((p) => p.teamId))];
   for (const tid of teamIds) {
     const mem = players.filter((p) => p.teamId === tid);
@@ -376,74 +408,89 @@ function buildAiPayload(digest, names = {}) {
     tgt[e.victimId] = (tgt[e.victimId] || 0) + 1;
   });
   const cps = [5, 10, 15, 20].map((m) => [m, cp(m)]).filter(([m, f]) => f && m * 60 < dur);
+  const isAramMode = digest.isAram ?? isAram(digest);
+  const hasLanes = digest.hasLanes ?? hasStandardLanes(digest);
+
   return {
     game: {
       id: digest.gameId,
       mode: names.queue || digest.gameMode,
       isCustom: digest.isCustom,
+      isAram: isAramMode,
+      hasLanes,
       durationMin: round(dur / 60, 1),
       version: digest.gameVersion,
       winner: digest.teams.filter((t) => t.win).map((t) => (t.teamId === 100 ? '蓝方' : t.teamId === 200 ? '红方' : 'team' + t.teamId)),
     },
-    teams: digest.teams.map((t) => ({
-      side: t.teamId === 100 ? '蓝方' : t.teamId === 200 ? '红方' : 'team' + t.teamId,
-      win: t.win,
-      kills: t.kills,
-      deaths: t.deaths,
-      gold: t.gold,
-      damage: t.dmg,
-      towers: t.objectives.towerKills,
-      inhibitors: t.objectives.inhibitorKills,
-      dragons: t.objectives.dragonKills,
-      barons: t.objectives.baronKills,
-      heralds: t.objectives.riftHeraldKills,
-    })),
+    teams: digest.teams.map((t) => {
+      const obj = {
+        side: t.teamId === 100 ? '蓝方' : t.teamId === 200 ? '红方' : 'team' + t.teamId,
+        win: t.win,
+        kills: t.kills,
+        deaths: t.deaths,
+        gold: t.gold,
+        damage: t.dmg,
+        towers: t.objectives.towerKills,
+        inhibitors: t.objectives.inhibitorKills,
+      };
+      if (!isAramMode) {
+        obj.dragons = t.objectives.dragonKills;
+        obj.barons = t.objectives.baronKills;
+        obj.heralds = t.objectives.riftHeraldKills;
+      }
+      return obj;
+    }),
     goldDiffByMinute: digest.timeline
       ? digest.timeline.frames
           .filter((_, i) => i % 5 === 0)
           .map((f) => ({ min: Math.round(f.t / 60000), blueMinusRed: (f.teamGold[100] || 0) - (f.teamGold[200] || 0) }))
       : undefined,
-    players: digest.players.map((p) => ({
-      name: names.alias?.[p.key] || p.name,
-      side: p.teamId === 100 ? '蓝方' : p.teamId === 200 ? '红方' : 'team' + p.teamId,
-      champion: names.champions?.[p.championId] || p.championId,
-      lane: p.laneCn || p.lane || '未知分路',
-      laneKey: p.lane || undefined,
-      win: p.win,
-      level: p.level,
-      kda: `${p.kills}/${p.deaths}/${p.assists}`,
-      kdaRatio: p.kda,
-      killParticipation: p.kp,
-      damageToChamps: p.dmg,
-      damageShareOfTeam: p.dmgShare,
-      damageTakenShareOfTeam: p.takenShare,
-      deathShareOfTeam: p.deathShare,
-      dmgPerMin: p.dmgPerMin,
-      gold: p.gold,
-      goldPerMin: p.goldPerMin,
-      cs: p.cs,
-      csPerMin: p.csPerMin,
-      vision: p.vision,
-      wardsPlaced: p.wardsPlaced,
-      wardsKilled: p.wardsKilled,
-      controlWards: p.controlWards,
-      ccSeconds: p.cc,
-      healing: p.heal,
-      damageMitigated: p.mitigated,
-      objectiveDamage: p.objDmg,
-      turretKills: p.turretKills,
-      multiKill: p.largestMultiKill,
-      firstBlood: p.firstBlood,
-      items: p.items.filter(Boolean).map((i) => names.items?.[i] || i),
-      augments: p.augments.map((a) => names.augments?.[a] || a),
-      localScore: p.score,
-      earlyDeathsBefore10min: earlyDeaths[p.participantId] || 0,
-      lateDeathsAfter10min: lateDeaths[p.participantId] || 0,
-      checkpoints: cps.map(([m, f]) => {
-        const x = f.players[p.participantId];
-        return x ? { min: m, gold: x.gold, level: x.level, cs: x.cs + x.jungle } : { min: m };
-      }),
-    })),
+    players: digest.players.map((p) => {
+      const pData = {
+        name: names.alias?.[p.key] || p.name,
+        side: p.teamId === 100 ? '蓝方' : p.teamId === 200 ? '红方' : 'team' + p.teamId,
+        champion: names.champions?.[p.championId] || p.championId,
+        win: p.win,
+        level: p.level,
+        kda: `${p.kills}/${p.deaths}/${p.assists}`,
+        kdaRatio: p.kda,
+        killParticipation: p.kp,
+        damageToChamps: p.dmg,
+        damageShareOfTeam: p.dmgShare,
+        damageTakenShareOfTeam: p.takenShare,
+        deathShareOfTeam: p.deathShare,
+        dmgPerMin: p.dmgPerMin,
+        gold: p.gold,
+        goldPerMin: p.goldPerMin,
+        cs: p.cs,
+        csPerMin: p.csPerMin,
+        ccSeconds: p.cc,
+        healing: p.heal,
+        damageMitigated: p.mitigated,
+        objectiveDamage: p.objDmg,
+        turretKills: p.turretKills,
+        multiKill: p.largestMultiKill,
+        firstBlood: p.firstBlood,
+        items: p.items.filter(Boolean).map((i) => names.items?.[i] || i),
+        augments: p.augments.map((a) => names.augments?.[a] || a),
+        localScore: p.score,
+        earlyDeathsBefore10min: earlyDeaths[p.participantId] || 0,
+        lateDeathsAfter10min: lateDeaths[p.participantId] || 0,
+        checkpoints: cps.map(([m, f]) => {
+          const x = f.players[p.participantId];
+          return x ? { min: m, gold: x.gold, level: x.level, cs: x.cs + x.jungle } : { min: m };
+        }),
+      };
+      if (hasLanes) {
+        pData.lane = p.laneCn || p.lane || '未知分路';
+        pData.laneKey = p.lane || undefined;
+        pData.vision = p.vision;
+        pData.wardsPlaced = p.wardsPlaced;
+        pData.wardsKilled = p.wardsKilled;
+        pData.controlWards = p.controlWards;
+      }
+      return pData;
+    }),
     notableEvents: (() => {
       const out = [];
       const fb = kills[0];
@@ -612,4 +659,6 @@ module.exports = {
   ZERO_PUUID,
   round,
   snapshotToMatchBundle,
+  isAram,
+  hasStandardLanes,
 };

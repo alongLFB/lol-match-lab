@@ -6,7 +6,7 @@ const gamedata = require('./gamedata');
 const innerwar = require('./innerwar');
 const { buildAiPayload } = require('./analysis');
 
-const SYSTEM = `你是一名资深的《英雄联盟》数据分析师和教练。用户会提供一场(或多场)对局由 LCU 导出的结构化数据。
+const SYSTEM_SR = `你是一名资深的《英雄联盟》数据分析师和教练。用户会提供一场召唤师峡谷对局由 LCU 导出的结构化数据。
 请严格基于数据给出客观、具体、有数据支撑的分析,不要编造数据中不存在的信息(例如没有的技能细节、团战过程)。
 重要分析原则:
 - 每位玩家的 "lane" 字段已明确标注其实际对局分路（上单/打野/中单/下路/辅助）。
@@ -18,12 +18,36 @@ const SYSTEM = `你是一名资深的《英雄联盟》数据分析师和教练�
     * 辅助：考核控图视野得分、关键控制、保护后排与先手开团贡献。
 - 绝不要在点评中输出“推测担任某某分路”等字眼，分路已明确确认，请直接以该分路开展分析。如果选手选出了非常规英雄打该分路（如上单薇恩、中单艾翁、下路亚索、辅助莫德凯撒），请结合其非常规选择的战术利弊与实际兑现效果进行深入复盘。
 - "localScore" 是本地启发式参考分,仅供参考,你需要给出自己的综合评分。
-- 评价要考虑模式差异(大乱斗/斗魂竞技场等没有常规分路与视野价值判断)。
 - 语气专业客观,允许适度锐评或幽默,但对内战朋友保持善意;缺点要指出并给出可执行建议。
 - 使用简体中文。
 只输出一个 JSON 对象,不要输出 markdown 代码块或额外文字。`;
 
-const MATCH_SCHEMA = `JSON 格式:
+const SYSTEM_ARAM = `你是一名资深的《英雄联盟》极地大乱斗 (ARAM) 高级数据分析师和教练。用户会提供一场极地大乱斗对局由 LCU 导出的结构化数据。
+请严格基于数据给出客观、具体、有数据支撑的分析,不要编造数据中不存在的信息。
+重要分析原则 (极地大乱斗专属):
+- 本模式为【极地大乱斗 (ARAM)】嚎哭深渊全员单线团战模式：
+  * 绝不存在上单、打野、中单、下路、辅助等常规召唤师峡谷分路，严禁以分路职责进行点评！
+  * 绝不存在中立史诗野怪（小龙/大龙/先锋/巢虫），严禁考核任何控龙、控野、野区抓人节奏！
+  * 绝不存在常规饰品眼与真眼机制，视野得分毫无意义，严禁提及或考核视野得分/插眼排眼！
+- 极地大乱斗核心考核维度：
+  * 英雄定位与团战职能：前排承伤与强开、远程长手Poke消耗压制、核心输出主C(持续物理/法术爆发)、反手保护与控制链衔接、残局收割刺杀；
+  * 伤害转化率与承伤比：伤害总量、伤害占比、承伤占比与死亡性价比；
+  * 阵亡与买装节奏：大乱斗只有死亡后才能在泉水买装备，盲目保 KDA 残血空蓝逛街会严重拖累团队装备更新与导致团战少人，适时清线后送塔或积极阵亡换装是高水平打法；
+  * 装备针对性选择：是否根据敌方阵容合理补出重伤、穿甲、法穿、魔抗、破盾等针对性功能装备。
+- "localScore" 是本地启发式参考分,仅供参考,你需要给出自己的综合评分。
+- 语气专业客观,允许适度锐评或幽默,但对内战朋友保持善意;缺点要指出并给出可执行建议。
+- 使用简体中文。
+只输出一个 JSON 对象,不要输出 markdown 代码块或额外文字。`;
+
+const SYSTEM_SPECIAL = `你是一名资深的《英雄联盟》特殊模式数据分析师和教练。用户会提供一场特殊模式（如斗魂竞技场等）对局由 LCU 导出的结构化数据。
+请严格基于数据给出客观、具体、有数据支撑的分析,不要编造数据中不存在的信息。
+重要分析原则:
+- 本场为特殊对战模式，没有常规召唤师峡谷分路，请重点考核英雄团战定位、伤害输出、承伤承压、出装与强化配合。
+- "localScore" 是本地启发式参考分,仅供参考,你需要给出自己的综合评分。
+- 语气专业客观，使用简体中文。
+只输出一个 JSON 对象,不要输出 markdown 代码块或额外文字。`;
+
+const MATCH_SCHEMA_SR = `JSON 格式:
 {
   "summary": "对局整体走势与胜负关键(3-5句)",
   "turningPoints": ["关键转折点/决定胜负的因素,2-4条"],
@@ -41,6 +65,29 @@ const MATCH_SCHEMA = `JSON 格式:
       "strengths": ["优点,引用具体数据"],
       "weaknesses": ["不足,引用具体数据"],
       "advice": ["可执行的改进建议"]
+    }
+  ]
+}
+players 必须包含输入里的全部玩家,顺序与输入一致。`;
+
+const MATCH_SCHEMA_ARAM = `JSON 格式:
+{
+  "summary": "大乱斗整体走势与胜负关键(双方阵容优劣、推进节奏与终结方式,3-5句)",
+  "turningPoints": ["关键转折点/团战胜负手,2-4条"],
+  "mvp": "MVP 玩家名",
+  "mvpReason": "原因",
+  "players": [
+    {
+      "name": "玩家名(与输入一致)",
+      "champion": "英雄名",
+      "role": "团战定位(例如: 前排开团/远程Poke/核心输出/反手保护/收割刺客 等)",
+      "team": "蓝方/红方",
+      "rating": 0到10的数字(可带一位小数),
+      "grade": "S/A/B/C/D 之一",
+      "verdict": "一句话点评(结合大乱斗团战、技能运用与出装表现)",
+      "strengths": ["优点,引用具体数据"],
+      "weaknesses": ["不足,引用具体数据"],
+      "advice": ["可执行的改进建议(如大乱斗出装调整、团战站位、买装时机等)"]
     }
   ]
 }
@@ -146,12 +193,28 @@ async function analyzeMatch(gameId, { force = false } = {}) {
     augments: maps.augments,
     queue: maps.queues[digest.queueId],
   });
+  const isAram = payload.game.isAram;
+  const hasLanes = payload.game.hasLanes;
+  let systemPrompt = SYSTEM_SR;
+  let matchSchema = MATCH_SCHEMA_SR;
+  let promptTitle = '请分析这场对局中每位成员的表现。';
+
+  if (isAram) {
+    systemPrompt = SYSTEM_ARAM;
+    matchSchema = MATCH_SCHEMA_ARAM;
+    promptTitle = '请分析这场极地大乱斗对局中每位成员的表现。';
+  } else if (!hasLanes) {
+    systemPrompt = SYSTEM_SPECIAL;
+    matchSchema = MATCH_SCHEMA_ARAM;
+    promptTitle = '请分析这场特殊对战模式中每位成员的表现。';
+  }
+
   const extra = store.getSettings().openai.extraPrompt;
   const messages = [
-    { role: 'system', content: SYSTEM },
+    { role: 'system', content: systemPrompt },
     {
       role: 'user',
-      content: `${extra ? '额外要求:' + extra + '\n\n' : ''}请分析这场对局中每位成员的表现。\n\n${MATCH_SCHEMA}\n\n对局数据:\n${JSON.stringify(payload)}`,
+      content: `${extra ? '额外要求:' + extra + '\n\n' : ''}${promptTitle}\n\n${matchSchema}\n\n对局数据:\n${JSON.stringify(payload)}`,
     },
   ];
   const r = await callOpenAI(messages);
@@ -219,7 +282,7 @@ async function analyzeInnerwar({ force = false, since = 0 } = {}) {
   };
   const extra = store.getSettings().openai.extraPrompt;
   const messages = [
-    { role: 'system', content: SYSTEM },
+    { role: 'system', content: SYSTEM_SR },
     {
       role: 'user',
       content: `${extra ? '额外要求:' + extra + '\n\n' : ''}以下是一个朋友圈内战(自定义对局)的累计统计,请分析每位成员的整体表现,并给出分队均衡建议。\n\n${INNERWAR_SCHEMA}\n\n统计数据:\n${JSON.stringify(payload)}`,
