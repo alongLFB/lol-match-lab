@@ -15,7 +15,7 @@ const watcher = require('./watcher');
 const analysis = require('./analysis');
 
 const PORT = Number(process.env.PORT || 5179);
-const PUBLIC = path.join(__dirname, '..', 'public');
+const PUBLIC = process.env.LOLLAB_PUBLIC || path.join(__dirname, '..', 'public');
 const MIME = {
   '.html': 'text/html; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',

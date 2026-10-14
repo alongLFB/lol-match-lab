@@ -33,3 +33,11 @@ desktop.ini
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+
+# 构建与打包输出
+build/
+dist/
+*.spec
+app.ico
+__pycache__/
+*.py[cod]

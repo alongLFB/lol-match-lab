@@ -6,7 +6,8 @@
   "main": "server/index.js",
   "scripts": {
     "start": "node server/index.js --open",
-    "serve": "node server/index.js"
+    "serve": "node server/index.js",
+    "build": "python build.py"
   },
   "engines": { "node": ">=18" }
 }
