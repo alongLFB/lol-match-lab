@@ -42,7 +42,15 @@ export async function render(app, _p, alive) {
 
   <section class="card"><h2>本地数据</h2>
     <p>数据目录:<code>${esc(s.dataDir)}</code></p>
+    <div style="margin:10px 0"><button class="btn ghost sm" id="btnOpenDir">📂 打开本地数据文件夹</button></div>
     <p class="muted small">包含:对局缓存(matches/)、历史列表缓存(lists/)、内战记录(innerwar.json)、AI 结果(ai/)、静态数据与图标缓存。客户端关闭时仍可浏览已缓存的对局。</p></section>`;
+
+  if ($('#btnOpenDir')) {
+    $('#btnOpenDir').onclick = async () => {
+      await post('/api/open-data-dir', {});
+      toast('已在资源管理器中打开数据目录', 'ok');
+    };
+  }
 
   $('#saveLcu').onclick = async () => {
     await put('/api/settings', { lcu: { installDir: $('#l_dir').value.trim(), port: $('#l_port').value.trim(), token: $('#l_token').value.trim() } });

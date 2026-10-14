@@ -103,6 +103,14 @@ route('GET', '/api/status', async () => {
   return out;
 });
 
+route('POST', '/api/open-data-dir', async () => {
+  const dir = store.DATA_DIR;
+  if (process.platform === 'win32') {
+    require('child_process').exec(`explorer "${dir}"`);
+  }
+  return { ok: true, path: dir };
+});
+
 route('GET', '/api/gamedata', async () => gamedata.all());
 
 route('GET', '/api/history', async ({ q }) => {
